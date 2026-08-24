@@ -1,0 +1,39 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.1'
+}
+
+group = 'edu.flab'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot BOM. 아래 의존성에 버전을 적지 않는 이유다.
+    // io.spring.dependency-management 플러그인 대신 Gradle 네이티브 platform 을 쓴다.
+    implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+
+    // Spring Boot 4 에서 spring-boot-starter-web 이 spring-boot-starter-webmvc 로 바뀌었다.
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // Spring Boot 4 는 통합 spring-boot-starter-test 대신 모듈별 테스트 스타터를 쓴다.
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
