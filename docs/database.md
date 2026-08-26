@@ -1,6 +1,13 @@
-# ERD — 케미방 생성 (#1)
+# Database
 
-이슈 #1이 쓰는 4개 테이블. `answer`는 다음 이슈에서 추가.
+스키마 설계와 그 근거. **스키마의 실제 정의는 `database/init/01-schema.sql` 이 소유한다.**
+JPA `ddl-auto` 는 `none` 이므로 Entity 를 고쳐도 스키마는 바뀌지 않는다.
+스키마를 바꾸려면 SQL 파일을 고치고 볼륨을 지운 뒤 다시 띄워야 한다 (`database/README.md`).
+
+이 문서와 실제 SQL 이 어긋나면 **SQL 이 현재 동작이고 이 문서가 의도다.**
+어긋난 채로 한쪽만 고치면 안 된다. 불일치를 먼저 해소한다.
+
+아래는 이슈 #1이 쓰는 4개 테이블. `answer`는 다음 이슈에서 추가.
 
 ```mermaid
 erDiagram
@@ -16,7 +23,7 @@ erDiagram
 
     room {
         bigint   id                  PK
-        varchar  share_code          UK "추측 불가 난수"
+        varchar  share_code          UK "난수, 0900_bin"
         bigint   host_participant_id FK "nullable"
         enum     status              "HOST_ANSWERING|OPEN"
         datetime created_at
@@ -25,7 +32,7 @@ erDiagram
     room_question {
         bigint  id                 PK
         bigint  room_id            FK
-        bigint  source_question_id "원본 질문, FK 아님"
+        bigint  source_question_id "원본 질문, FK 아님, NOT NULL"
         enum    category
         varchar content
         varchar option_a
@@ -37,7 +44,7 @@ erDiagram
         bigint   id            PK
         bigint   room_id       FK
         varchar  nickname      "표시용, 공백 정리"
-        varchar  nickname_key  "중복 검사용, as_cs"
+        varchar  nickname_key  "중복 검사용, as_cs, 폭 48"
         binary   access_token_hash UK "SHA-256"
         enum     answer_status "ANSWERING|SUBMITTED"
         datetime created_at
@@ -51,17 +58,36 @@ erDiagram
 
 ## 결정 메모
 
-### question ↔ room_question에는 FK를 두지 않음
+### room_question 은 관계 테이블이 아니라 스냅샷이다
 
-방 생성 시점에 질문 내용을 값으로 복사한다.
-질문 Pool의 내용이 변경되어도 기존 방의 질문은 유지되어야 하기 때문이다 (PRD 8장).
+> **이 절은 임의 수정 금지 대상이다.**
+> `room_question` 을 흔한 M:N 관계 테이블로 보고 `source_question_id` 에 FK 를 추가하지 마라.
+> FK 부재는 누락이 아니라 결정이다. 바꾸려면 아래 근거를 먼저 반박해야 한다.
 
-스냅샷은 값을 복사한 것으로 이미 달성된다. FK가 있어도 복사한 내용은 갱신되지 않는다.
-FK를 두지 않는 이유는 따로 있다. 질문 Pool을 방과 독립적으로 정리하기 위해서다.
+`room_question` 은 방 생성 시점의 `question` **값 복사본**이다. 복사 대상은 다음과 같다.
+
+```text
+question.id       →  room_question.source_question_id   원본 추적용, FK 아님
+question.category →  room_question.category
+question.content  →  room_question.content
+question.option_a →  room_question.option_a
+question.option_b →  room_question.option_b
+```
+
+원본 `question` 이 나중에 수정되거나 삭제되어도 이미 만들어진 방의 질문은 그대로여야 한다 (PRD 8장).
+
+스냅샷 자체는 값을 복사한 것으로 이미 달성된다. FK가 있어도 복사한 내용은 갱신되지 않는다.
+**FK를 두지 않는 이유는 따로 있다.** 질문 Pool을 방과 독립적으로 정리하기 위해서다.
 FK가 있으면 질문 하나를 지울 때 그 질문을 쓴 모든 방이 걸린다.
 
 대신 `source_question_id`는 참조 무결성이 보장되지 않는 참고값이다.
 가리키는 question 이 사라져도 검출되지 않으므로 통계·추적 용도로만 쓴다.
+**조회 시 `question` 과 조인하지 마라.** 방의 질문은 `room_question` 만 읽어서 완결되어야 한다.
+조인하는 순간 스냅샷이 무의미해진다.
+
+`source_question_id` 는 FK 는 아니지만 **`NOT NULL` 이다.** 아래 `UNIQUE (room_id, source_question_id)`
+가 작동하려면 그래야 한다. MySQL 은 UNIQUE 인덱스에서 NULL 을 서로 다른 값으로 취급하므로,
+nullable 이면 같은 방에 같은 질문이 두 번 들어가도 막지 못한다. nullable 로 되돌리지 마라.
 
 ### room 과 participant 는 상호 참조
 
@@ -117,6 +143,11 @@ PRD 7장이 요구한 중복 판정 기준은 대소문자 통합까지이므로
 소문자화까지 애플리케이션이 끝낸 값이 들어오므로 DB는 있는 그대로 비교하면 되고,
 정규화 규칙이 애플리케이션 한 곳에만 남는다.
 
+**`nickname_key` 의 폭은 `nickname` 보다 넓다 (48 vs 12).** 소문자화가 문자 수를 늘릴 수 있기 때문이다.
+`U+0130 (İ)` 의 소문자 매핑은 `U+0069 U+0307` 두 코드포인트이고 NFC 로 재결합되지 않는다.
+두 컬럼을 같은 폭으로 두면 12자 닉네임이 24자 키가 되어 저장이 실패한다 (`1406 Data too long`).
+사용자에게 보이지 않는 내부 컬럼이므로 표시용 길이에 맞출 이유가 없다. 폭을 줄이지 마라.
+
 대신 DB가 대소문자 차이를 더는 걸러주지 않는다. 정규화가 잘못되면 중복이 그대로 들어간다.
 소문자화는 `toLowerCase(Locale.ROOT)` 로 한다. 인자 없이 부르면 시스템 로케일을 타는데,
 터키어 로케일에서는 `I` 가 점 없는 `ı` 로 바뀌어 같은 닉네임이 서버마다 다르게 정규화된다.
@@ -132,6 +163,21 @@ DB에는 SHA-256 해시를 `BINARY(32)`로 저장한다.
 `BINARY(32)`는 바이너리 비교라 이 문제가 발생하지 않는다.
 
 토큰 원본은 128-bit 이상 난수를 URL-safe base64 로 인코딩한다 (PRD 17장).
+
+`share_code` 도 같은 문제를 겪는다. 기본 collation 에서는 대소문자만 다른 코드가 중복으로
+거부되고, 잘못된 대소문자 URL 로도 방에 접근된다. base64url 은 대소문자를 구분하므로
+바이너리 비교가 필요하다.
+
+**`ascii_bin` 이 아니라 `utf8mb4_0900_bin` 을 쓴다.** 처음에는 `ascii_bin` 이었으나 두 가지 문제가 있었다.
+
+- `ascii_bin` 은 **PAD SPACE** 라 후행 공백을 무시한다. MySQL 8.0 이상에서 NO PAD 인 것은
+  `utf8mb4_0900_*` 계열뿐이다. 쿼리 파라미터의 `+` 가 공백으로 디코드되면
+  같은 방이 서로 다른 문자열로 조회되어 "코드 = 방의 유일한 식별자" 전제가 깨진다
+- 커넥션은 utf8mb4 인데 컬럼이 ascii 면, 비ASCII 입력으로 조회할 때 0건이 아니라 **예외**가 난다
+  (`1267 Illegal mix of collations`, `3988 Conversion impossible`).
+  인증 없이 아무나 던질 수 있는 경로에서 404 가 아니라 500 이 나온다
+
+`ascii` 로 되돌리지 마라. 저장 공간을 아끼려는 이유라면 이득보다 손해가 크다.
 
 ### 상태와 시각은 함께 움직인다
 
@@ -163,7 +209,7 @@ FOREIGN KEY (room_id)
 
 -- participant
 -- collation 은 nickname_key 컬럼 정의에 지정한다
---   nickname_key VARCHAR(12) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs NOT NULL
+--   nickname_key VARCHAR(48) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs NOT NULL
 UNIQUE (room_id, nickname_key)
 UNIQUE (room_id, id)                     -- room 복합 FK 의 참조 대상 인덱스
 UNIQUE (access_token_hash)
@@ -201,3 +247,21 @@ room.host_participant_id = NULL
 ```
 
 `room_question` 은 CASCADE 라 room 삭제 시 함께 지워진다.
+
+## 제약이 무력화되던 곳 (수정 완료)
+
+아래 4건은 실제 MySQL 8.4 에 스키마를 적재해 재현했고, 수정 후 재현되지 않음을 다시 확인했다.
+**네 건 모두 "제약을 선언했는데 특정 값에서 조용히 통과되는"** 형태였다.
+이 기록은 같은 실수로 되돌아가는 것을 막기 위한 것이다.
+
+| 무엇이 무력화됐나 | 어떤 값에서 | 어떻게 고쳤나 |
+| --- | --- | --- |
+| `share_code` 정확 비교 | 후행 공백 (`ascii_bin` 은 PAD SPACE) | `utf8mb4_0900_bin` (NO PAD) |
+| `share_code` 조회 | 비ASCII 입력 → 0건이 아니라 예외 | 컬럼 charset 을 커넥션과 맞춤 |
+| `nickname_key` 길이 | 소문자화로 12자 → 24자 | 폭을 48 로 |
+| `UNIQUE (room_id, source_question_id)` | `NULL` (MySQL 은 NULL 을 중복으로 안 봄) | `NOT NULL` |
+
+각 항목의 상세 근거는 위 결정 메모의 해당 절에 있다.
+
+**교훈**: 제약이 존재한다는 것과 그 제약이 모든 입력에 대해 작동한다는 것은 다르다.
+새 제약을 추가할 때 그것을 무력화하는 값(NULL, 공백, 대소문자, 정규화 결과)을 직접 대입해 보라.

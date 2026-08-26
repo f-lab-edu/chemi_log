@@ -17,3 +17,8 @@ docker compose up -d
 ```bash
 docker compose down -v && docker compose up -d
 ```
+
+## 설계 문서
+
+스키마 설계와 그 근거는 [docs/database.md](../docs/database.md) 에 있다.
+`init/01-schema.sql` 이 실제 정의를 소유하며, JPA `ddl-auto` 는 `none` 이다.
