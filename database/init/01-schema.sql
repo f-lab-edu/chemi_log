@@ -31,9 +31,10 @@ CREATE TABLE room (
     -- base64url 은 대소문자를 구분하므로 바이너리 비교(_bin)가 필요하다.
     --
     -- ascii_bin 이 아니라 utf8mb4_0900_bin 인 이유가 두 가지 있다.
-    -- 1) ascii_bin 은 PAD SPACE 라 후행 공백을 무시한다. MySQL 8.0 이상에서 NO PAD 인 것은
-    --    utf8mb4_0900_* 계열뿐이다. 쿼리 파라미터의 '+' 가 공백으로 디코드되면
-    --    같은 방이 서로 다른 문자열로 조회된다.
+    -- 1) ascii_bin 은 PAD SPACE 라 비교할 때 후행 공백을 무시한다. 공유 코드는 입력 문자열을
+    --    그대로 비교해야 하는데, PAD SPACE 면 'abc' 와 'abc   ' 가 같은 방으로 조회되고
+    --    UNIQUE 인덱스에서도 충돌한다. MySQL 8.0 이상에서 NO PAD 인 문자 collation 은
+    --    utf8mb4_0900_* 계열뿐이다 (charset 이 binary 인 binary collation 은 예외로 NO PAD).
     -- 2) 커넥션은 utf8mb4 인데 컬럼이 ascii 면, 비ASCII 입력으로 조회할 때 0건이 아니라
     --    예외가 난다 (1267 Illegal mix of collations / 3988 Conversion impossible).
     --    404 가 나와야 할 자리에 500 이 나온다.

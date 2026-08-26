@@ -170,9 +170,11 @@ DB에는 SHA-256 해시를 `BINARY(32)`로 저장한다.
 
 **`ascii_bin` 이 아니라 `utf8mb4_0900_bin` 을 쓴다.** 처음에는 `ascii_bin` 이었으나 두 가지 문제가 있었다.
 
-- `ascii_bin` 은 **PAD SPACE** 라 후행 공백을 무시한다. MySQL 8.0 이상에서 NO PAD 인 것은
-  `utf8mb4_0900_*` 계열뿐이다. 쿼리 파라미터의 `+` 가 공백으로 디코드되면
-  같은 방이 서로 다른 문자열로 조회되어 "코드 = 방의 유일한 식별자" 전제가 깨진다
+- `ascii_bin` 은 **PAD SPACE** 라 비교할 때 후행 공백을 무시한다. 공유 코드는 입력 문자열을
+  그대로 비교해야 하는데, PAD SPACE 면 `abc` 와 `abc   ` 가 같은 방으로 조회되고
+  UNIQUE 인덱스에서도 충돌해 "코드 = 방의 유일한 식별자" 전제가 깨진다.
+  MySQL 8.0 이상에서 NO PAD 인 문자 collation 은 `utf8mb4_0900_*` 계열뿐이다.
+  charset 이 `binary` 인 `binary` collation 도 NO PAD 이지만 문자 비교용이 아니다
 - 커넥션은 utf8mb4 인데 컬럼이 ascii 면, 비ASCII 입력으로 조회할 때 0건이 아니라 **예외**가 난다
   (`1267 Illegal mix of collations`, `3988 Conversion impossible`).
   인증 없이 아무나 던질 수 있는 경로에서 404 가 아니라 500 이 나온다
