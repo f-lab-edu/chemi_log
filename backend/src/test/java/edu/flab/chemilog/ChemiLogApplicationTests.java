@@ -1,9 +1,9 @@
 package edu.flab.chemilog;
 
+import edu.flab.chemilog.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+@IntegrationTest
 class ChemiLogApplicationTests {
 
     @Test
