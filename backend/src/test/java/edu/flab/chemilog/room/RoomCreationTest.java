@@ -184,6 +184,28 @@ class RoomCreationTest {
     }
 
     /**
+     * 본문이 JSON null 이면 @Valid 는 돌지 않는다. null 객체는 검증 대상이 아니다.
+     *
+     * 그래도 500 이 아니다. RequestResponseBodyMethodProcessor 가 검증보다 먼저
+     * "역직렬화 결과가 null 인데 @RequestBody 가 required 인가" 를 확인하고
+     * HttpMessageNotReadableException 을 던진다. 그것은 부모 핸들러가 400 으로 바꾼다.
+     *
+     * 자동 리뷰가 이 경로를 컨트롤러의 NullPointerException 으로 보고 500 이라고 지적해서
+     * 확인했다. 회귀로 남긴다.
+     */
+    @Test
+    void 본문이_JSON_null_이면_VALIDATION_FAILED_로_거절한다() throws Exception {
+        mockMvc.perform(post("/api/rooms")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("null"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+        assertThat(countOf("room")).isZero();
+        assertThat(countOf("participant")).isZero();
+    }
+
+    /**
      * 매핑되지 않은 요청은 Spring MVC 가 정한 상태로 나가야 한다.
      *
      * @ExceptionHandler(Exception.class) 만 두면 ExceptionHandlerExceptionResolver 가
