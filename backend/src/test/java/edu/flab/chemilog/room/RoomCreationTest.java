@@ -107,7 +107,8 @@ class RoomCreationTest {
         assertThat(host.get("host_participant_id")).isEqualTo(host.get("id"));
         // 표시값은 앞뒤 공백 제거와 연속 공백 축소까지만 적용한다 (PRD 7장).
         assertThat(host.get("nickname")).isEqualTo("Min Su");
-        assertThat(host.get("nickname_key")).isEqualTo("min su");
+        // 키는 거기서 공백을 전부 지우고 소문자화한다. 표시값과 달라지는 것이 정상이다.
+        assertThat(host.get("nickname_key")).isEqualTo("minsu");
         assertThat(host.get("answer_status")).isEqualTo("ANSWERING");
         assertThat(host.get("submitted_at")).isNull();
     }
@@ -232,7 +233,7 @@ class RoomCreationTest {
         Map<String, Object> host = jdbcTemplate.queryForMap(
                 "SELECT nickname, nickname_key FROM participant");
         assertThat(host.get("nickname")).isEqualTo("김 민수");
-        assertThat(host.get("nickname_key")).isEqualTo("김 민수");
+        assertThat(host.get("nickname_key")).isEqualTo("김민수");
     }
 
     @Test

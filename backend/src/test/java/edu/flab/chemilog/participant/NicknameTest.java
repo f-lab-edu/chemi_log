@@ -64,6 +64,40 @@ class NicknameTest {
         }
 
         /**
+         * PRD 7장이 중복 판정에서 공백을 전부 지우라고 정한다. 목업 05 가 안내하는
+         * `지은 · 지 은 · JIEUN · jieun 은 모두 같아요` 가 이 규칙 위에 성립한다.
+         */
+        @Test
+        void 내부_공백만_다른_닉네임은_같은_키가_된다() {
+            assertThat(Nickname.of("지 은").key()).isEqualTo(Nickname.of("지은").key());
+        }
+
+        /**
+         * 접히는 공백은 `\p{Zs}` 전부다. 눈으로 구분되지 않으므로 이스케이프로 적는다.
+         * U+00A0 은 NBSP, U+3000 은 전각 공백이다.
+         */
+        @Test
+        void 비ASCII_공백이_들어가도_같은_키가_된다() {
+            assertThat(Nickname.of("\uc9c0\u00a0\uc740").key()).isEqualTo(Nickname.of("지은").key());
+            assertThat(Nickname.of("\uc9c0\u3000\uc740").key()).isEqualTo(Nickname.of("지은").key());
+        }
+
+        /** 공백을 지우는 것은 키뿐이다. 표시값에는 입력한 모양이 남는다 (PRD 7장). */
+        @Test
+        void 공백_제거는_표시값에_영향을_주지_않는다() {
+            assertThat(Nickname.of("지 은").display()).isEqualTo("지 은");
+        }
+
+        /**
+         * 공백 제거가 서로 다른 사람을 뭉치게 만들 수 있다. 위키가 그것을 감수하기로
+         * 정한 것이라 규칙이 살아 있는지만 확인한다.
+         */
+        @Test
+        void 대소문자와_공백이_함께_달라도_같은_키가_된다() {
+            assertThat(Nickname.of("Min Su").key()).isEqualTo(Nickname.of("minsu").key());
+        }
+
+        /**
          * PRD 7장이 accent 는 구분하라고 요구한다. nickname_key 의 collation 이
          * utf8mb4_0900_as_cs 인 것도 같은 근거다 (database/init/01-schema.sql).
          */

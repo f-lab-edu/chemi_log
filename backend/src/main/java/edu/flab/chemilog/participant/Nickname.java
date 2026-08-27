@@ -95,9 +95,20 @@ public record Nickname(String display, String key) {
             throw invalid("길이가 " + length + "자다");
         }
 
-        // NFC 를 먼저 하고 소문자화한다. PRD 7장이 정한 순서다.
+        // NFC 를 먼저 하고 공백을 지운 뒤 소문자화한다. PRD 7장이 정한 순서다.
         // 소문자화가 문자 수를 늘릴 수 있어서 nickname_key 를 VARCHAR(48) 로 넓혀 뒀다.
-        String key = Normalizer.normalize(display, Normalizer.Form.NFC).toLowerCase(Locale.ROOT);
+        //
+        // 공백을 지우는 것은 키뿐이다. display 에는 내부 공백이 남는다. PRD 7장이 "공백 제거는
+        // 중복 판정에만 적용한다" 고 나눠 뒀다. 표시값까지 지우면 `지 은` 으로 입력한 사람이
+        // `지은` 으로 보인다.
+        //
+        // 여기서 남아 있는 공백은 U+0020 하나뿐이다. 위에서 \p{Zs} 를 전부 그것으로 접었고
+        // 앞뒤도 지웠으므로, 이 시점의 display 에는 낱개의 보통 공백만 있다.
+        // display 는 앞뒤 공백이 이미 지워져 있어 공백만으로 이루어질 수 없다. 비어 있는
+        // 경우는 위에서 걸리므로 공백을 지운 키도 비지 않는다.
+        String key = Normalizer.normalize(display, Normalizer.Form.NFC)
+                .replace(" ", "")
+                .toLowerCase(Locale.ROOT);
         return new Nickname(display, key);
     }
 
