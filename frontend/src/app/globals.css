@@ -1,26 +1,34 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* 값의 출처는 위키 mockup/ui-mvp.html 이다. 목업에 없는 색을 새로 만들지 않는다. */
+@theme {
+  --color-brand: #7c5cff;
+  --color-brand-deep: #5b3be0;
+  --color-brand-soft: #f5f2ff;
+  --color-ink: #1a1626;
+  --color-ink-sub: #6b6580;
+  --color-ink-mute: #9c97ae;
+  --color-line: #ece9f7;
+  --color-surface: #f7f6fd;
+  --color-danger: #e0433c;
+  --color-danger-line: #f0554f;
+
+  --font-sans: "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Noto Sans KR", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* 다크 모드는 목업에 없다. 라이트 한 벌만 쓴다. */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #ffffff;
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  /* 한국어를 어절 단위로 끊는다. 기본값은 글자 단위라 "뽑아 / 요." 처럼 잘린다.
+     어절 경계가 없는 긴 URL 은 그대로 넘치므로 그런 곳에는 break-all 을 따로 준다. */
+  word-break: keep-all;
+}
+
+/* 하단 고정 CTA 가 iOS 홈 인디케이터에 걸리지 않게 한다 (PRD 4장 safe area). */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
 }
