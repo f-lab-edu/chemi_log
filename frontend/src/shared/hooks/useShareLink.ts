@@ -40,7 +40,12 @@ export function useShareLink() {
       await navigator.share({ title: "케미로그", text, url });
     } catch (error) {
       // 사용자가 공유 시트를 닫으면 AbortError 로 reject 된다. 오류가 아니다.
-      if (error instanceof DOMException && error.name === "AbortError") {
+      //
+      // `instanceof DOMException` 으로 좁히지 않는다. 표준은 DOMException 을 던지지만
+      // 카카오톡 같은 인앱 브라우저는 Web Share 를 자체 구현으로 감싸면서 평범한 Error 나
+      // 그냥 객체를 던지기도 한다. 그때 취소가 실패로 분류되어 아래 복사로 넘어가고,
+      // 공유를 그만둔 사람이 "링크를 복사했어요" 를 보게 된다. 이름만 본다.
+      if (isAbort(error)) {
         return;
       }
       // `navigator.share` 가 있어도 호출이 실패하는 환경이 있다. 카카오톡 같은 인앱 브라우저,
@@ -51,6 +56,15 @@ export function useShareLink() {
   }
 
   return { canShare, copyState, share, copy };
+}
+
+/** 던져진 값이 무엇이든 이름만 본다. `null` 과 원시값도 안전하게 걸러진다. */
+function isAbort(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
 }
 
 export const COPY_MESSAGE: Record<Exclude<CopyState, "idle">, string> = {

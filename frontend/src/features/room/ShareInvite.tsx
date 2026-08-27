@@ -1,18 +1,34 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useBrowserValue } from "@/shared/hooks/useBrowserValue";
 import { COPY_MESSAGE, useShareLink } from "@/shared/hooks/useShareLink";
 import { Button } from "@/shared/ui/Button";
 
-/** 초대 링크 경로. 참여 화면(`app/r/[shareCode]`)과 같아야 한다. */
+/**
+ * 초대 링크 경로. 참여 화면(`app/r/[shareCode]`)과 같아야 한다.
+ *
+ * `features/*\/api.ts` 와 같이 인코딩한다. `share_code` 는 서버가 만드는 base64url 22자라
+ * 정상 경로에서는 바뀌는 문자가 없지만, 이 값은 URL 파라미터에서 그대로 흘러들어온다.
+ * 인코딩하지 않으면 `/rooms/a%20b/invite` 로 들어온 사람이 공백이 든 초대 링크를 복사한다.
+ */
 export function inviteUrlOf(origin: string, shareCode: string): string {
-  return `${origin}/r/${shareCode}`;
+  return `${origin}/r/${encodeURIComponent(shareCode)}`;
 }
 
 /**
  * 초대 링크를 보여주고 공유한다 (목업 04).
+ *
+ * `footer` 는 아래 버튼 더미에 이어 붙인다. 목업에는 공유와 복사 둘뿐이지만 이 화면은
+ * 방장이 제출을 마친 뒤 도착하는 곳이라, 그것만으로는 앱 안으로 돌아갈 길이 없다.
  */
-export function ShareInvite({ shareCode }: { shareCode: string }) {
+export function ShareInvite({
+  shareCode,
+  footer,
+}: {
+  shareCode: string;
+  footer?: ReactNode;
+}) {
   const origin = useBrowserValue(() => window.location.origin, "");
   const inviteUrl = origin ? inviteUrlOf(origin, shareCode) : "";
   const { canShare, copyState, share, copy } = useShareLink();
@@ -58,6 +74,7 @@ export function ShareInvite({ shareCode }: { shareCode: string }) {
         >
           링크 복사하기
         </Button>
+        {footer}
       </div>
     </>
   );

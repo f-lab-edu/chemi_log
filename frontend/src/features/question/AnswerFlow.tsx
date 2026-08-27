@@ -150,12 +150,30 @@ function AnswerSheet({
           : `/rooms/${shareCode}/status`,
       );
     } catch (error) {
-      // 네트워크 오류에서는 선택을 유지하고 재시도 CTA 를 준다 (PRD 12장).
-      setFailure(
+      const failed =
         error instanceof ApiError
           ? error
-          : new ApiError("INTERNAL_ERROR", "잠시 후 다시 시도해 주세요.", 0),
-      );
+          : new ApiError("INTERNAL_ERROR", "잠시 후 다시 시도해 주세요.", 0);
+
+      // 이미 제출한 사람은 여기 머물러 봐야 할 일이 없다. `destinationFor` 는 화면에
+      // 들어올 때만 판정하므로, 다른 탭이나 다른 기기에서 그사이 제출한 경우를 걸러 내지
+      // 못한다. 그대로 두면 같은 409 를 반복해 받으며 나갈 길이 없는 화면이 된다.
+      //
+      // **방장도 참여 현황으로 보낸다.** 참여 현황은 아무도 되돌려보내지 않는 유일한
+      // 화면이라 여기서 고리가 생길 수 없다. 초대 링크로 보내면 그 화면이 `me` 를 다시
+      // 읽는데, 서버가 409 를 주고도 `ANSWERING` 을 돌려주는 순간 두 화면이 서로를 부른다.
+      // 방장은 참여 현황의 "초대 링크 다시 보내기" 로 한 번에 건너갈 수 있다.
+      //
+      // `ROOM_NOT_OPEN` 은 여기서 다루지 않는다. 참여는 방이 OPEN 일 때만 되고 방 상태는
+      // 되돌아가지 않으므로 이 자리에 닿지 않는다.
+      if (failed.code === "ALREADY_SUBMITTED") {
+        clearDraft(shareCode);
+        router.replace(`/rooms/${shareCode}/status`);
+        return;
+      }
+
+      // 네트워크 오류에서는 선택을 유지하고 재시도 CTA 를 준다 (PRD 12장).
+      setFailure(failed);
       setSubmitting(false);
     }
   }

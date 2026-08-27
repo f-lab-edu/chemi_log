@@ -64,7 +64,7 @@ export function ParticipantStatus({ shareCode }: { shareCode: string }) {
         </h1>
         <p className="mt-2.5 text-[13px] leading-[1.55] text-white/85">
           {iSubmitted
-            ? waitingMessage(waiting, resultExists)
+            ? waitingMessage(waiting, resultExists, participants.length)
             : "내 답변을 제출하면 케미 결과를 볼 수 있어요"}
         </p>
       </header>
@@ -137,9 +137,15 @@ export function ParticipantStatus({ shareCode }: { shareCode: string }) {
 function waitingMessage(
   waiting: ParticipantSummary[],
   resultReady: boolean,
+  total: number,
 ): string {
   if (waiting.length === 0) {
-    return "모두 답변을 마쳤어요";
+    // 방장 혼자면 기다릴 사람이 없는 것이 아니라 아직 아무도 오지 않은 것이다.
+    // 이 경우를 나누지 않으면 "친구를 기다리고 있어요" 아래에 "모두 답변을 마쳤어요" 가
+    // 붙어 두 문장이 서로 다른 말을 한다. 헤더는 완료자 2명 이상으로 따로 판정한다.
+    return total <= 1
+      ? "초대 링크를 보내면 친구가 참여할 수 있어요"
+      : "모두 답변을 마쳤어요";
   }
   const suffix = resultReady
     ? "답하면 순위를 다시 계산해요"
