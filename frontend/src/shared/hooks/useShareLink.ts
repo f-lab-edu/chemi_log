@@ -18,6 +18,9 @@ export function useShareLink() {
   const [copyState, setCopyState] = useState<CopyState>("idle");
 
   async function copy(url: string) {
+    // 이전 결과를 먼저 지운다. 같은 버튼을 두 번 눌렀을 때 문구가 그대로면
+    // 두 번째 시도가 반영됐는지 화면으로 알 수 없다.
+    setCopyState("idle");
     try {
       await navigator.clipboard.writeText(url);
       setCopyState("copied");
@@ -28,6 +31,11 @@ export function useShareLink() {
   }
 
   async function share(url: string, text: string) {
+    // 여기서도 지운다. 공유에 성공하거나 사용자가 공유 시트를 닫는 경로는 `copyState` 를
+    // 건드리지 않으므로, 지우지 않으면 앞선 복사 실패 문구가 그대로 남는다.
+    // 복사가 거부된 뒤 공유에 성공한 사람이 "복사하지 못했어요" 를 보게 된다.
+    // 이 안내 영역은 `aria-live="polite"` 라 스크린리더에도 읽힌다.
+    setCopyState("idle");
     try {
       await navigator.share({ title: "케미로그", text, url });
     } catch (error) {
