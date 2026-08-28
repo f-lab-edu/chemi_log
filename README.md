@@ -25,9 +25,7 @@ root/
 
 | 문서 | 내용 |
 | --- | --- |
-| [docs/domain.md](docs/domain.md) | 도메인 개념, 비즈니스 규칙, 상태 전이 |
 | [docs/database.md](docs/database.md) | 스키마 설계와 근거, 제약 설계 이력 |
-| [docs/architecture.md](docs/architecture.md) | 기술 스택, 패키지 구조, 계층 책임 |
 
 ## 로컬 실행
 

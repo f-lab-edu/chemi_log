@@ -268,7 +268,7 @@ jobs:
 
             ### 이 저장소가 의도적으로 정한 설계입니다. 결함으로 올리지 마십시오
 
-            근거는 `docs/domain.md` 와 `docs/database.md` 에 적혀 있습니다.
+            근거는 `docs/database.md` 와 `01-schema.sql` 의 주석에 적혀 있습니다.
             **이것을 결함으로 지적하는 것이 이 저장소에서 가장 흔한 오탐입니다.**
 
             - `room` 에 상태 컬럼이 없습니다. 방 상태는 방장의 `submitted_at` 으로 판정합니다
@@ -289,13 +289,15 @@ jobs:
 
             ### 읽을 문서
 
-            변경된 코드와 관련된 것만 읽습니다. 저장소에 있는 것은 이 셋입니다.
+            변경된 코드와 관련된 것만 읽습니다. 저장소에 있는 것은 이 하나입니다.
 
             ```
-            docs/domain.md        도메인 개념, 비즈니스 규칙, 상태 전이, 불변식
-            docs/database.md      DB, Entity, Repository, SQL, 인덱스, 제약
-            docs/architecture.md  시스템 구조, 패키지, 계층, 컴포넌트 관계
+            docs/database.md  DB, Entity, Repository, SQL, 인덱스, 제약, 설계 근거
             ```
+
+            **`docs/domain.md` 와 `docs/architecture.md` 는 이 저장소에 없습니다.**
+            로컬 전용 문서라 체크아웃에 포함되지 않습니다. 없다고 해서 결함으로 보고하지 마십시오.
+            도메인 규칙은 `docs/database.md` 와 `01-schema.sql` 의 주석에서 확인합니다.
 
             ## 이 실행 환경에서만 다른 것
 

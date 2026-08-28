@@ -32,19 +32,6 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-
-    // 통합 테스트는 실제 MySQL 8.4 에 붙는다. 스키마의 ENUM, 컬럼별 collation,
-    // ON DELETE CASCADE 는 H2 로 재현되지 않아 인메모리 DB 로는 검증할 수 없다.
-    //
-    // **CHECK 와 복합 FK 를 근거로 적지 마라.** 2026-08-27 ERD 재설계에서 둘 다
-    // 없앴다. 컬럼을 하나로 줄여 어긋날 방법이 사라졌기 때문이다 (docs/database.md).
-    //
-    // Boot 4.1.1 의 BOM 이 Testcontainers 2.0.5 를 가리킨다. 2.x 에서 artifactId 앞에
-    // testcontainers- 가 붙었다. 옛 이름(junit-jupiter, mysql)은 BOM 에 없어서 버전이
-    // 빈 값으로 남고 의존성 해석 단계에서 빌드가 멈춘다.
-    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
-    testImplementation 'org.testcontainers:testcontainers-mysql'
 }
 
 tasks.named('test') {
