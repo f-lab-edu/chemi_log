@@ -80,23 +80,15 @@ jobs:
     runs-on: ubuntu-latest
     # 기본값이 360분입니다. 리뷰가 헛돌면 그동안 계속 API 를 부르고 그만큼 청구됩니다.
     #
-    # **이 값은 상한이 아니라 안전망입니다.** 실제로 멈추는 것은 아래 "리뷰할 변경분을
-    # 파일로 뽑습니다" 스텝이 입력을 유한하게 만드는 것이어야 합니다. 여기 걸려 잘리면
-    # job 이 cancelled 가 되고 post_feedback 이 skipped 라 코멘트가 남지 않습니다.
-    # 비용만 나가고 산출물이 0 이 됩니다. 2026-08-28 에 두 번 그렇게 끝났습니다.
-    #
-    # **모델을 바꿀 때 이 값을 같이 보십시오.** 비용은 시간이 아니라 토큰에 붙지만,
-    # 시간이 길수록 토큰을 더 씁니다. 현재 모델(luna)로 30분이면 약 $0.2 입니다.
-    # terra 로 올리면 같은 30분이 $1.4 이상이 됩니다. 그때는 이 값을 다시 내리십시오.
-    #
-    # **이 값을 바꾸면 아래 프롬프트에서 강제 종료 시간을 알려주는 절도 함께 고치십시오.**
-    # 프롬프트에 "20분" 이 문자 그대로 박혀 있습니다. 두 값이 어긋나면 모델이 잘못된
-    # 예산을 전제로 탐색을 조기에 끊습니다.
-    timeout-minutes: 20
+    # Codex 단계는 아래에서 15분으로 먼저 제한합니다. 이 값은 취소 정리와 상태 코멘트를
+    # 남길 여유를 둔 job 안전망입니다. 따라서 Codex가 끝나지 않아도 post_feedback 이
+    # Skipped로 끝나지 않습니다.
+    timeout-minutes: 25
     permissions:
       contents: read
     outputs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
+      codex_outcome: ${{ steps.run_codex.outcome }}
     steps:
       # secrets 컨텍스트는 스텝의 if 에서 쓸 수 없어 env 로 넘겨 run 안에서 봅니다.
       # 이 가드가 없으면 codex-action 안쪽에서 프록시가 뜨지 않아 원인을 알기 어려운
@@ -158,7 +150,7 @@ jobs:
       # 예산까지 넣은 실행이 둘 다 30분을 다 쓰고 아무 보고 없이 강제 종료됐습니다.
       # 변경 파일이 8개뿐이라 개수 상한에 닿지 않았고, 줄 수는 모델이 세지 못했습니다.
       #
-      # 그래서 읽을 것을 여기서 정해 줍니다. 입력이 유한하면 탐색도 끝납니다.
+      # 그래서 읽을 것을 여기서 정해 주고, 기준과 함께 하나의 Codex 입력으로 만듭니다.
       # **이 스텝을 지우고 프롬프트 지시로 되돌리지 마십시오.** 그 방식은 이미 실패했습니다.
       - name: 리뷰할 변경분을 파일로 뽑습니다
         id: diff
@@ -166,13 +158,17 @@ jobs:
           # 볼 범위만 담습니다. frontend/ 와 테스트는 리뷰 대상이 아닙니다.
           git diff HEAD^1 HEAD -- \
             backend/src/main backend/build.gradle database docs .github README.md \
-            > /tmp/pr.diff
+            > "$GITHUB_WORKSPACE/.codex-pr.diff"
 
-          LINES=$(wc -l < /tmp/pr.diff)
+          LINES=$(wc -l < "$GITHUB_WORKSPACE/.codex-pr.diff")
           MAX=4000
           if [ "$LINES" -gt "$MAX" ]; then
-            head -n "$MAX" /tmp/pr.diff > /tmp/pr.diff.cut
-            mv /tmp/pr.diff.cut /tmp/pr.diff
+            head -n "$MAX" "$GITHUB_WORKSPACE/.codex-pr.diff" \
+              > "$GITHUB_WORKSPACE/.codex-pr.diff.cut"
+            printf '\n\n변경분이 상한에서 잘렸습니다.\n' \
+              >> "$GITHUB_WORKSPACE/.codex-pr.diff.cut"
+            mv "$GITHUB_WORKSPACE/.codex-pr.diff.cut" \
+              "$GITHUB_WORKSPACE/.codex-pr.diff"
             echo "cut=$((LINES - MAX))" >> "$GITHUB_OUTPUT"
           else
             echo "cut=0" >> "$GITHUB_OUTPUT"
@@ -180,8 +176,21 @@ jobs:
           echo "lines=$LINES" >> "$GITHUB_OUTPUT"
           echo "::notice::리뷰할 diff $LINES 줄 (상한 $MAX)"
 
+      # Codex 가 별도 파일을 읽으러 가지 않도록, 기준과 diff를 하나의 입력으로 만듭니다.
+      - name: Codex 리뷰 입력을 만듭니다
+        run: |
+          {
+            cat .github/codex-review-prompt.md
+            printf '\n<PR_DIFF>\n'
+            cat .codex-pr.diff
+            printf '\n</PR_DIFF>\n'
+          } > .codex-review-input.md
+
       - name: Codex 리뷰 실행
         id: run_codex
+        # job 전체 제한보다 먼저 끊어야 후속 단계가 리뷰 결과나 종료 상태를 남길 수 있습니다.
+        timeout-minutes: 15
+        continue-on-error: true
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -208,246 +217,16 @@ jobs:
           #
           # **낮추지 마십시오.** medium 은 Codex CLI 기본값이라 지정하는 의미가 없고,
           # 시간이 모자랄 때 여기를 낮추는 것은 원인을 모르는 상태의 방어적 추측입니다.
-          # 시간이 문제면 아래 프롬프트의 파일 개수 상한이나 model 을 손대십시오.
+          # 시간이 문제면 아래 프롬프트의 도구 제한이나 model 을 손대십시오.
           effort: high
-          prompt: |
-            이 저장소의 PR #${{ steps.pr.outputs.number }} 를 리뷰합니다.
-
-            ## 리뷰 기준
-
-            **이 프롬프트가 이 실행의 리뷰 기준 전부입니다.** 저장소에 리뷰 기준 문서를
-            따로 두지 않으므로 다른 파일에서 기준을 찾지 마십시오. 없다고 해서 멈추지도 마십시오.
-
-            ### 우선순위
-
-            위에서부터 봅니다. 위쪽 문제를 놓치고 아래쪽을 지적하지 마십시오.
-
-            ```
-            1  Correctness           의도한 대로 동작하지 않는 곳
-            2  Data consistency      부분 실패 시 남는 불일치, 참조 무결성, 제약이 실제로 작동하는가
-            3  Concurrency           동시 요청, 중복 조회 후 삽입 패턴
-            4  Transaction boundary  함께 커밋돼야 할 것이 나뉘었는가, 경계가 너무 넓은가
-            5  Error handling        삼켜지는 예외, 잘못된 상태코드, 사용자가 받는 응답
-            6  Backward compat       스키마·API 변경이 기존 데이터나 클라이언트를 깨뜨리는가
-            7  Security              검증 없는 외부 입력, 자격증명 노출, 권한 검사 누락
-            8  Performance           실제 조회 패턴에 근거한 문제만
-            ```
-
-            **Maintainability 는 이 실행에서 보고하지 않습니다.** 설계 의견도 마찬가지입니다.
-
-            ### 선언된 제약이 무력화되는 경우를 특히 주의하십시오
-
-            이 저장소에서 실제로 발견된 결함은 **전부** 이 형태였습니다. 제약이 존재한다는 것과
-            그 제약이 모든 입력에 대해 작동한다는 것은 다릅니다. 선언된 제약마다 그것을
-            무력화하는 입력을 직접 찾아 대입해 보십시오.
-
-            - UNIQUE 제약에 nullable 컬럼이 포함되어 있는가
-              (MySQL 은 NULL 을 서로 다른 값으로 취급하므로 제약이 무력화됩니다)
-            - 문자열 비교 collation 이 PAD SPACE 인가 NO PAD 인가
-              (MySQL 8.0 이상에서 문자 collation 중에는 `utf8mb4_0900_*` 만 NO PAD 입니다.
-              `BINARY`/`VARBINARY` 는 `binary` collation 이라 NO PAD 이므로 PAD SPACE 로
-              오분류하지 마십시오)
-            - 정규화·인코딩을 거친 뒤 길이가 변하는 입력을 컬럼 폭이 담을 수 있는가
-              (대소문자 변환은 문자 수를 늘릴 수 있습니다)
-            - 컬럼 charset 과 커넥션 charset 이 다를 때, 변환 불가능한 입력이
-              "0건 반환" 이 아니라 예외를 던지지 않는가
-            - 복합 FK 에 NULL 이 포함되면 검사 자체를 건너뛰지 않는가
-            - CHECK 로 표현하려는 조건이 여러 테이블에 걸쳐 있지 않은가
-              (MySQL CHECK 는 단일 행만 볼 수 있습니다)
-            - Entity 와 `01-schema.sql` 이 어긋나지 않는가
-              (`ddl-auto: none` 이라 런타임에 터집니다)
-
-            ## 범위는 구현 레벨입니다
-
-            **구현이 틀린 곳만 봅니다.** 설계는 멘토가 봅니다. 봇이 설계 의견을 달면
-            멘토가 볼 화면에 판단 대상이 아닌 글이 쌓이고, 정작 봐야 할 구현 결함이 아래로 밀립니다.
-
-            | 보고합니다 | 보고하지 않습니다 |
-            | --- | --- |
-            | 코드가 의도대로 동작하지 않는 곳 | 패키지·계층 배치, 클래스 분리 |
-            | Entity 와 `01-schema.sql` 의 불일치 | 추상화 수준, 네이밍 |
-            | 트랜잭션 경계가 어긋나 남는 불일치 | "이 패턴이 더 낫습니다" 류의 제안 |
-            | 선언된 제약을 무력화하는 입력 | 확장성·유지보수 일반론 |
-            | 예외 처리와 HTTP 상태 코드 오류 | 문서화·주석 부족 |
-            | 라이브러리·프레임워크 오용 | 더 나은 대안 소개 |
-            | 동시 요청·중복 요청 문제 | 테스트를 추가하면 좋겠다는 권유 |
-            | 이 PR 이 낡게 만든 `docs/` 서술 | 원래부터 낡아 있던 문서 |
-
-            경계가 애매하면 기준은 하나입니다. **"이대로 두면 언젠가 잘못 동작하는가."**
-            그렇다면 구현 문제이니 보고합니다.
-            "지금도 동작하지만 더 나은 방법이 있습니다" 면 보고하지 않습니다.
-
-            라이브러리 오용은 이 범위 안입니다. 잘못된 의존성 좌표, 버전에 맞지 않는 패키지 경로,
-            그 버전에 없는 API 를 부르는 것은 취향이 아니라 동작하지 않는 코드입니다.
-
-            **문서 불일치는 이 PR 이 만든 것만 봅니다.** "이 변경이 `docs/` 의 어느 서술을
-            낡게 만들었습니다" 만 한 줄로 적습니다. 낡은 `docs/` 는 다음 리뷰의 판단 근거로
-            들어가므로 방치하면 오탐이 늘어납니다. 원래부터 낡아 있던 서술은 이 PR 의 책임이
-            아니므로 보고하지 않습니다.
-
-            ### 지적하지 말아야 할 것
-
-            - **코드 스타일, 포매팅, 네이밍 취향.** 취향 차이를 버그처럼 지적하지 마십시오
-            - 주석·문서화 부족 자체
-            - `docs/` 나 저장소에 명시되지 않은 컨벤션을 근거로 한 지적
-            - "테스트를 추가하면 좋겠습니다" 류의 일반론
-              (단, 변경이 기존 테스트를 깨뜨린다면 그것은 1번 Correctness 입니다)
-            - 더 나은 대안이 있다는 취지만의 리팩터링 제안
-            - **현실적인 failure scenario 가 없는 이론적 문제.**
-              일어날 수 있다는 것만으로는 부족합니다
-
-            ### 이 저장소가 의도적으로 정한 설계입니다. 결함으로 올리지 마십시오
-
-            근거는 `docs/database.md` 와 `01-schema.sql` 의 주석에 적혀 있습니다.
-            **이것을 결함으로 지적하는 것이 이 저장소에서 가장 흔한 오탐입니다.**
-
-            - `room` 에 상태 컬럼이 없습니다. 방 상태는 방장의 `submitted_at` 으로 판정합니다
-            - `room_question` 에 표시 순서 컬럼이 없습니다. 순서는 `id` 오름차순입니다
-            - `answer` 에 `room_id` 가 없습니다. 참여자와 질문이 같은 방인지는 앱이 확인합니다
-            - "방마다 방장은 한 명" 을 DB 로 강제하지 않습니다.
-              `is_host = TRUE` 를 만드는 곳이 방 생성 한 군데뿐입니다
-
-            `docs/database.md` 의 "제약이 무력화되던 곳 (수정 완료)" 는 이미 발견·수정·검증된
-            항목입니다. `share_code` 의 collation 과 charset, `nickname_key` 의 폭 48 이 그
-            결과입니다. **더 단순해 보인다는 이유로 되돌리라고 제안하지 마십시오.**
-
-            ### SonarCloud 와 겹치는 영역
-
-            이 저장소는 PR 단계에서 SonarCloud 정적 분석이 함께 돕니다. 자원 누수, 미사용 변수,
-            순환 복잡도, 단순 중복 코드처럼 **기계적으로 검출되는 항목**은 그쪽이 더 싸고
-            정확합니다. 중복해서 길게 지적하지 마십시오.
-
-            ### 읽을 문서
-
-            변경된 코드와 관련된 것만 읽습니다. 저장소에 있는 것은 이 하나입니다.
-
-            ```
-            docs/database.md  DB, Entity, Repository, SQL, 인덱스, 제약, 설계 근거
-            ```
-
-            **`docs/domain.md` 와 `docs/architecture.md` 는 이 저장소에 없습니다.**
-            로컬 전용 문서라 체크아웃에 포함되지 않습니다. 없다고 해서 결함으로 보고하지 마십시오.
-            도메인 규칙은 `docs/database.md` 와 `01-schema.sql` 의 주석에서 확인합니다.
-
-            ## 이 실행 환경에서만 다른 것
-
-            아래 셋을 전제하지 마십시오. CI 에서는 성립하지 않습니다.
-
-            1. **`docs/worklog.md` 와 `docs/conventions.md` 는 이 저장소에 없습니다.**
-               로컬 전용 파일이라 체크아웃에 포함되지 않습니다. 없다고 해서 결함으로 보고하지 마십시오.
-               "결정된 것" 과 "미해결 이슈" 를 볼 수 없으므로, 이미 합의된 설계를 새 결함으로
-               올릴 위험이 있습니다. 코드 주석과 `docs/` 에 근거가 적혀 있으면 의도된 설계로 보십시오.
-            2. **아무것도 실행할 수 없습니다.** 여기는 네트워크가 차단된 샌드박스입니다.
-               아래를 **시도하지 마십시오.**
-
-               ```
-               ./gradlew  (test, build, compileJava 등 전부)
-               npm, pnpm, yarn
-               docker, docker compose        MySQL 기동 포함
-               curl, wget, pip, mvn
-               ```
-
-               의존성을 받을 수 없어 성공할 수 없고, 네트워크 타임아웃에 매달려
-               리뷰 시간을 전부 써 버립니다.
-
-               쓸 수 있는 것은 **파일 읽기와 `git` 명령뿐**입니다.
-
-               **재현할 필요 없습니다.** 코드를 읽고 판단해서 보고하면 됩니다.
-               `CONFIRMED` 는 "코드만으로 결함이 확정됨" 이라 재현 없이도 쓸 수 있습니다.
-               맥락에 따라 의도된 동작일 수 있으면 `SUSPECT` 입니다.
-
-               걸러야 할 것은 재현하지 않은 지적이 아니라 **근거가 약한 지적**입니다.
-               아래 "리뷰 의견 구성" 의 "입력이나 상태가 X일 때 Y가 발생한다" 를 한 문장으로
-               쓸 수 없으면 보고하지 마십시오. 그 기준은 코드만 읽어도 지킬 수 있습니다.
-            3. **위키(`PRD.md`, `API-규약.md`)도 이 저장소에 없습니다.** 별도 저장소라 체크아웃에
-               포함되지 않습니다. `docs/` 가 위키를 최종 근거로 인용하는 대목이 여럿 있는데,
-               그 내용은 확인할 수 없습니다. **확인하지 못한 규약을 근거로 지적하지 마십시오.**
-               응답 형식이나 에러 코드가 규약과 다른 것 같아도, 코드와 `docs/` 만으로
-               확정할 수 없으면 보고하지 않습니다.
-
-            ## 볼 범위: `/tmp/pr.diff` 하나입니다
-
-            **리뷰할 변경분이 `/tmp/pr.diff` 에 이미 뽑혀 있습니다. 그 파일을 읽으십시오.**
-            볼 범위에 해당하는 것만 담겨 있고 `frontend/` 와 테스트는 이미 빠져 있습니다.
-
-            ```
-            cat /tmp/pr.diff
-            ```
-
-            **다른 파일을 열지 마십시오. `git diff` 도 직접 돌리지 마십시오.**
-            `/tmp/pr.diff` 에 있는 것이 이 리뷰의 전부입니다. 거기 없는 것은 보고 대상이 아닙니다.
-
-            이 제한은 비용 때문입니다. 저장소를 자유롭게 탐색하게 두면 리뷰가 끝나지 않고,
-            20분에 강제 종료되어 **비용만 나가고 코멘트가 하나도 안 달립니다.**
-            2026-08-28 에 두 번 그렇게 끝났습니다.
-
-            딱 하나 예외가 있습니다. **diff 만으로 판단이 서지 않는 결함을 발견했을 때**,
-            그 파일 하나를 열어 확인해도 됩니다. **최대 3개까지입니다.**
-            확인 없이도 보고할 수 있으면 열지 마십시오.
-
-            변경되지 않은 기존 코드는 지적 대상이 아닙니다.
-            **테스트가 부족하다거나 케이스를 추가하라는 지적도 하지 마십시오.**
-            백엔드와 프론트의 계약이 어긋나는지도 보지 마십시오. 그 판단은 사람이 합니다.
-
-            `build.gradle` 에서 볼 것은 **잘못된 의존성 좌표, 그 버전에 없는 API 를 쓰는
-            설정, 버전에 맞지 않는 패키지 경로**입니다. 동작하지 않는 코드이기 때문입니다.
-            의존성을 더 넣으라거나 버전을 올리라는 제안은 범위 밖입니다.
-
-            `.github/` 에는 이 워크플로 파일 자신이 들어 있습니다. **그래도 봅니다.**
-            트리거 조건, 권한, 시크릿 처리, 스텝 순서가 틀리면 그것도 구현 결함입니다.
-            다만 프롬프트 문구를 어떻게 쓸지는 설계 의견이라 범위 밖입니다.
-
-            ## 시간 안에 반드시 결과를 남기십시오
-
-            **가장 나쁜 결과는 아무 보고 없이 시간이 끝나는 것입니다.**
-            이 실행은 20분에 강제 종료되고, 그때까지 보고를 마치지 못하면
-            PR 에 코멘트가 달리지 않습니다. 리뷰 비용만 나가고 남는 것이 없습니다.
-
-            그러므로 **완벽을 노리지 마십시오.**
-
-            ### 절차는 이것뿐입니다
-
-            ```
-            1. cat /tmp/pr.diff 로 변경분을 한 번 읽는다
-            2. 위 우선순위대로 결함을 찾는다
-            3. 확인이 꼭 필요한 파일만 최대 3개까지 연다
-            4. 보고를 쓴다
-            ```
-
-            **탐색을 넓히지 마십시오.** 읽을 것은 이미 정해져 있습니다.
-            더 볼 것이 없는지 저장소를 뒤지는 순간 이 실행은 시간 안에 끝나지 않습니다.
-
-            - 결함을 7건 찾았으면 더 찾지 말고 보고를 씁니다. 출력 상한이 7건입니다
-            - 확실한 결함을 찾으면 그것부터 확정해 둡니다
-            - **같은 파일을 두 번 읽지 마십시오.** 한 번 읽고 판단합니다
-            - 찾은 것이 하나도 없어도 "발견된 결함 없음" 이라고 반드시 답합니다.
-              빈 응답으로 끝내지 마십시오
-
-            `/tmp/pr.diff` 끝에 잘렸다는 표시가 있으면 보고 끝에 한 줄 남기십시오.
-            `변경분이 상한에서 잘렸습니다`. 그것도 쓸모 있는 정보입니다.
-
-            변경분이 전부 `frontend/` 라면 "이번 변경은 프론트엔드뿐이라 리뷰 대상이
-            없습니다" 라고만 답합니다.
-
-            ## 출력
-
-            GitHub PR 코멘트로 그대로 올라갑니다. 마크다운으로 씁니다.
-
-            - **한국어 존댓말로 씁니다.** 종결은 `~합니다` 로 통일합니다
-            - **줄표를 쓰지 않습니다.** 삽입구는 괄호로, 문장 연결은 두 문장으로 나눕니다
-            - 문단은 한 줄로 씁니다. GitHub 이 단일 개행을 `<br>` 로 렌더링하므로
-              80자에서 끊으면 문장 중간이 끊겨 보입니다. 표와 코드블록과 목록은 예외입니다
-            - 각 지적에 `파일:줄번호` 와 확신도(`CONFIRMED` / `SUSPECT`)를 붙입니다
-            - 심각한 순으로 최대 7건입니다. 개수를 채우려고 억지로 만들지 마십시오
-            - 기준을 통과하는 항목이 없으면 "발견된 결함 없음" 이라고만 씁니다
-
+          prompt-file: .codex-review-input.md
       - name: 리뷰 결과가 비었는지 확인합니다
         if: steps.run_codex.outputs.final-message == ''
         run: echo "::warning::Codex 가 빈 응답을 돌려줬습니다. API 키와 사용량 한도를 확인하라."
 
   post_feedback:
     needs: review
-    if: needs.review.outputs.final_message != ''
+    if: always() && needs.review.result != 'skipped'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -459,19 +238,30 @@ jobs:
         uses: actions/github-script@v8
         env:
           CODEX_FINAL_MESSAGE: ${{ needs.review.outputs.final_message }}
+          CODEX_OUTCOME: ${{ needs.review.outputs.codex_outcome }}
+          REVIEW_RESULT: ${{ needs.review.result }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
         with:
           github-token: ${{ github.token }}
           script: |
-            const body = [
-              '## Codex 리뷰',
-              '',
-              '기준은 `codex-review.yml` 의 프롬프트입니다. 자동으로 실행됐습니다.',
-              '',
-              '---',
-              '',
-              process.env.CODEX_FINAL_MESSAGE,
-            ].join('\n');
+            const finalMessage = process.env.CODEX_FINAL_MESSAGE?.trim();
+            const body = finalMessage
+              ? [
+                  '## Codex 리뷰',
+                  '',
+                  '기준은 `codex-review.yml` 의 프롬프트입니다. 자동으로 실행됐습니다.',
+                  '',
+                  '---',
+                  '',
+                  finalMessage,
+                ].join('\n')
+              : [
+                  '## Codex 리뷰',
+                  '',
+                  '자동 리뷰가 결과를 남기기 전에 종료됐습니다. 이번 실행에는 리뷰 의견이 없습니다.',
+                  `review job: ${process.env.REVIEW_RESULT}, Codex step: ${process.env.CODEX_OUTCOME || '시작하지 않음'}`,
+                  'Actions 실행 로그를 확인한 뒤 다시 실행하세요.',
+                ].join('\n');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
