@@ -17,8 +17,15 @@
 root/
 ├── backend/    Spring Boot
 ├── frontend/   Next.js
-└── database/   MySQL (docker-compose)
+├── database/   MySQL (docker-compose)
+└── docs/       프로젝트 문서
 ```
+
+## 문서
+
+| 문서 | 내용 |
+| --- | --- |
+| [docs/database.md](docs/database.md) | 스키마 설계와 근거, 제약 설계 이력 |
 
 ## 로컬 실행
 
