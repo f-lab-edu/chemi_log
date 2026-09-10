@@ -37,7 +37,7 @@ public record Nickname(String display, String key) {
     private static final Pattern SPACE_SEPARATOR_RUN = Pattern.compile("\\p{Zs}+");
 
     /** 위 규칙으로 접은 뒤 앞뒤에 남은 공백. `strip()` 은 `\p{Zs}` 를 다 지우지 못합니다. */
-    private static final Pattern SURROUNDING_SPACE = Pattern.compile("^ +| +$");
+    private static final Pattern SURROUNDING_SPACE = Pattern.compile("(?:^ +)|(?: +$)");
 
     /**
      * 쓸 수 없는 문자.
