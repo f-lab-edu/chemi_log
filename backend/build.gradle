@@ -33,8 +33,8 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 
-    // DB 를 쓰는 테스트는 실제 MySQL 8.4 에 붙는다. 인메모리 DB 를 쓰지 않는 이유는
-    // 이 스키마의 ENUM, 컬럼별 collation, ON DELETE 동작을 H2 가 재현하지 못하기 때문이다
+    // DB 를 쓰는 테스트는 실제 MySQL 8.4 에 붙는다. 인메모리 DB 는 쓰지 않는다.
+    // H2 는 이 스키마의 ENUM, 컬럼별 collation, ON DELETE 동작을 재현하지 못한다
     // (docs/architecture.md 의 테스트 구조).
     //
     // Testcontainers 2.x 에서 artifactId 앞에 testcontainers- 가 붙었다. 옛 이름
@@ -47,4 +47,11 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+
+    // MySqlContainerConfig 가 이 경로를 런타임에 읽어서 Gradle 은 입력인 줄 모른다.
+    // 선언하지 않으면 01-schema.sql 을 고쳐도 test 가 UP-TO-DATE 로 건너뛰고,
+    // ddl-auto 가 none 이라 어긋남이 드러나지 않는다.
+    inputs.dir(file('../database/init'))
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+            .withPropertyName('databaseInitScripts')
 }
