@@ -32,6 +32,17 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+
+    // DB 를 쓰는 테스트는 실제 MySQL 8.4 에 붙는다. 인메모리 DB 를 쓰지 않는 이유는
+    // 이 스키마의 ENUM, 컬럼별 collation, ON DELETE 동작을 H2 가 재현하지 못하기 때문이다
+    // (docs/architecture.md 의 테스트 구조).
+    //
+    // Testcontainers 2.x 에서 artifactId 앞에 testcontainers- 가 붙었다. 옛 이름
+    // (org.testcontainers:junit-jupiter, :mysql)은 Boot 4.1.1 의 BOM 에 없어서
+    // 버전이 빈 값이 되고 의존성 해석에서 죽는다.
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-mysql'
 }
 
 tasks.named('test') {
