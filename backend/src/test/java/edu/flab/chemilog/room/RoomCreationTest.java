@@ -10,8 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import edu.flab.chemilog.common.ApiErrorCode;
 import edu.flab.chemilog.support.IntegrationTest;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -389,11 +391,55 @@ class RoomCreationTest {
                         .content("{\"nickname\":\"%s\"}".formatted(NICKNAME)))
                 .andExpect(status().isNotAcceptable())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.code").value("NOT_ACCEPTABLE"));
 
         assertThat(countOf("room")).isZero();
         assertThat(countOf("participant")).isZero();
         assertThat(countOf("room_question")).isZero();
+    }
+
+    /**
+     * ApiErrorCode 는 코드마다 HTTP 상태를 하나씩 들고 있고, 프론트는 code 만 보고 화면을 정합니다.
+     * 그 둘이 어긋나면 프론트가 code 로 분기할 수 없습니다.
+     *
+     * **응답에서 읽은 code 로 다시 enum 을 찾아 비교합니다.** 상태와 코드를 각각 적어 두면
+     * 둘 다 틀린 값을 적었을 때 통과합니다. 한쪽을 다른 쪽의 기댓값으로 쓰면 그 경로가 막힙니다.
+     *
+     * 나온 코드 목록도 함께 봅니다. 그 줄이 없으면 네 요청이 전부 400 VALIDATION_FAILED 로
+     * 나가도 상태와 코드가 짝이 맞아 통과합니다. 상태별 분기를 지웠을 때 걸리는 것이 이 줄입니다.
+     *
+     * 여기 넷이 GlobalExceptionHandler.toErrorCode 가 상태별로 고르는 전부입니다.
+     * 5xx 는 INTERNAL_ERROR, 남은 4xx 는 400 VALIDATION_FAILED 로 갑니다.
+     */
+    @Test
+    void 공통_코드는_선언한_HTTP_상태로만_나간다() throws Exception {
+        List<MockHttpServletRequestBuilder> requests = List.of(
+                post("/api/rooms/없는경로"),
+                delete("/api/rooms"),
+                post("/api/rooms")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.TEXT_HTML)
+                        .content("{\"nickname\":\"%s\"}".formatted(NICKNAME)),
+                post("/api/rooms")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content(NICKNAME));
+
+        List<String> codes = new ArrayList<>();
+        for (MockHttpServletRequestBuilder request : requests) {
+            MvcResult result = mockMvc.perform(request)
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andReturn();
+
+            String code = JsonPath.read(result.getResponse().getContentAsString(), "$.code");
+            codes.add(code);
+            assertThat(result.getResponse().getStatus())
+                    .as("code=%s", code)
+                    .isEqualTo(ApiErrorCode.valueOf(code).status().value());
+        }
+
+        assertThat(codes).containsExactly("NOT_FOUND", "METHOD_NOT_ALLOWED",
+                "NOT_ACCEPTABLE", "UNSUPPORTED_MEDIA_TYPE");
+        assertThat(countOf("room")).isZero();
     }
 
     /**

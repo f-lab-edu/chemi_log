@@ -16,6 +16,8 @@ public enum ApiErrorCode {
     // 한 코드로 합치면 프론트가 없는 경로와 없는 방을 구분하지 못합니다.
     NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로가 없습니다."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 요청 방식입니다."),
+    NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "JSON 으로만 응답합니다."),
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "요청 본문은 JSON 이어야 합니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "잠시 후 다시 시도해 주세요.");
 
     private final HttpStatus status;

@@ -85,9 +85,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     /**
      * 부모가 정한 상태를 규약의 공통 코드로 바꿉니다.
      *
-     * 규약의 공통 코드는 넷입니다. 없는 경로는 NOT_FOUND, 지원하지 않는 메서드는
-     * METHOD_NOT_ALLOWED, 나머지 4xx(본문 파싱 실패, 검증 실패, 지원하지 않는 Content-Type)는
-     * VALIDATION_FAILED, 5xx 는 INTERNAL_ERROR 입니다.
+     * 여기서 고르는 코드는 자기가 선언한 status() 가 인자로 받은 statusCode 와 같아야 합니다.
+     * 규약이 code 하나에 HTTP 상태 하나를 묶어 두었고 프론트는 code 만 보고 화면을 정합니다.
+     * 상태가 다른 응답에 같은 code 를 실으면 프론트가 code 로 분기할 수 없습니다.
+     * 남은 VALIDATION_FAILED 는 400 전용입니다. 본문 파싱 실패와 검증 실패가 여기 옵니다.
+     *
      * 도메인 코드(ROOM_NOT_FOUND, NICKNAME_DUPLICATED, ALREADY_SUBMITTED, ROOM_NOT_OPEN)는
      * 서비스가 ApiException 으로 직접 던지므로 여기를 지나지 않습니다.
      *
@@ -103,6 +105,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         }
         if (HttpStatus.METHOD_NOT_ALLOWED.isSameCodeAs(statusCode)) {
             return ApiErrorCode.METHOD_NOT_ALLOWED;
+        }
+        if (HttpStatus.NOT_ACCEPTABLE.isSameCodeAs(statusCode)) {
+            return ApiErrorCode.NOT_ACCEPTABLE;
+        }
+        if (HttpStatus.UNSUPPORTED_MEDIA_TYPE.isSameCodeAs(statusCode)) {
+            return ApiErrorCode.UNSUPPORTED_MEDIA_TYPE;
         }
         return ApiErrorCode.VALIDATION_FAILED;
     }
