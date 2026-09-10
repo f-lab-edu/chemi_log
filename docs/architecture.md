@@ -9,7 +9,7 @@ ERD 재설계에서 컬럼 여덟 개가 제거되면서 기존 구현이 `ddl-a
 [x] 엔티티와 리포지토리   Room, Participant, RoomQuestion, Question
 [x] 질문 세트 생성 로직   RoomQuestionFactory. 카테고리별 3개씩 뽑아 12개를 섞어서 INSERT
 [x] POST /api/rooms      응답의 방 상태를 RoomStatus.of(방장)로 계산
-[x] 통합 테스트           Testcontainers로 실제 MySQL 8.4 사용. 56개 전부 통과
+[x] 통합 테스트           Testcontainers로 실제 MySQL 8.4 사용. 57개 전부 통과
 ```
 
 **`Answer` 엔티티는 아직 없습니다.**
@@ -17,19 +17,13 @@ ERD 재설계에서 컬럼 여덟 개가 제거되면서 기존 구현이 `ddl-a
 
 **이 이슈의 구현은 끝났습니다.**
 `RoomService.create()`에 있던 `TODO(human)`은 `RoomStatus.of(Participant)`로 채웠습니다.
-남은 작업은 커밋과 PR입니다.
+PR #5로 올라가 있고 머지를 기다리는 중입니다.
 
 프론트엔드는 목업 8개와 로딩·오류 화면까지 구현되어 있고,
 백엔드 연동은 `POST /api/rooms`만 실제로 확인했습니다.
 나머지 화면은 아직 없는 API를 가정하고 구현한 상태입니다.
 
-**프론트엔드 코드는 이 브랜치에 없습니다. `feat/1-create-room-ui` 브랜치에 있습니다.**
-프론트엔드는 PR을 올리지 않기로 했기 때문에 백엔드 브랜치에 섞지 않습니다.
-아래에서 `frontend/` 파일을 가리키는 절은 모두 해당 브랜치를 기준으로 합니다.
-
-```bash
-git show feat/1-create-room-ui:frontend/next.config.ts
-```
+프론트엔드는 PR 없이 `main`에 직접 머지했습니다(2026-09-09, `ca9f935`). 아래에서 `frontend/` 파일을 가리키는 절은 지금 작업 트리에서 그대로 열어 보면 됩니다.
 
 아래에서 "현재"로 표시한 내용만 실제 코드에서 확인한 사실입니다.
 그 외 내용은 TBD이거나, 결정은 끝났지만 아직 코드로 구현되지 않은 상태입니다.
