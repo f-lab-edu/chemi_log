@@ -174,6 +174,12 @@ CREATE TABLE answer (
     participant_id   BIGINT NOT NULL,
     room_question_id BIGINT NOT NULL,
     choice           ENUM('A', 'B') NOT NULL,
+    -- 행이 DB 에 들어온 시각이다. 사용자가 그 문항을 고른 시각이 아니다.
+    --
+    -- 매핑할 때 @Generated(event = INSERT) 와 insertable = false, updatable = false 를
+    -- 함께 붙인다. @Generated 만 붙이면 UPDATE 의 SET 절에 실리고, 평범한 @Column 이면
+    -- Hibernate 가 INSERT 에 NULL 을 실어 1048 로 거부된다.
+    created_at       DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
     -- 한 사람이 한 질문에 한 번만 답한다.
     --
